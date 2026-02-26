@@ -2,16 +2,13 @@ import discord
 from discord.ext import commands
 import sqlite3
 import os
-from PIL import Image, ImageDraw, ImageFont
-import requests
 from io import BytesIO
 import datetime
 from dotenv import load_dotenv
+from typing import Optional
 
-# Load token from .env
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
-
 BADGE_PREFIX = "NR"
 
 # ---------------------------
@@ -19,7 +16,9 @@ BADGE_PREFIX = "NR"
 # ---------------------------
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix=";", intents=intents)
-
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
 # ---------------------------
 # DATABASE SETUP
 # ---------------------------
@@ -82,7 +81,7 @@ async def visa(ctx, status: str, member: discord.Member):
 # CHECK BADGE
 # ---------------------------
 @bot.command()
-async def badge(ctx, member: discord.Member = None):
+async def badge(ctx, member: Optional[discord.Member] = None):
     member = member or ctx.author
     cursor.execute("SELECT badge_id FROM users WHERE user_id = ?", (member.id,))
     result = cursor.fetchone()
@@ -116,31 +115,34 @@ async def deletebadge(ctx, member: discord.Member):
 # PASSPORT ASCII (instead of PNG)
 # ---------------------------
 @bot.command()
-async def passport(ctx, member: discord.Member = None):
+async def passport(ctx, member: Optional[discord.Member] = None):
     member = member or ctx.author
     cursor.execute("SELECT badge_id, registered_at FROM users WHERE user_id = ?", (member.id,))
     data = cursor.fetchone()
+
     if not data:
         await ctx.send("❌ This user does not have a passport.")
         return
 
     badge_id, registered_at = data
 
-    # ASCII passport
-    ascii_passport = f"""
-    ┌─────────────────────────────┐
-    │       NARI GAMING REPUBLIC   │
-    │     OFFICIAL DIGITAL PASSPORT│
-    ├─────────────────────────────┤
-    │ NAME: {member.name}
-    │ BADGE ID: {badge_id}
-    │ REGISTERED: {registered_at}
-    │ CITIZEN ID: {member.id}
-    ├─────────────────────────────┤
-    │ STATUS: VERIFIED MEMBER      │
-    └─────────────────────────────┘
-    """
-    await ctx.send(f"```\n{ascii_passport}\n```")
+    ascii_passport = (
+        "```"
+        "\n┌─────────────────────────────────┐"
+        "\n│      NARI GAMING REPUBLIC       │"
+        "\n│    OFFICIAL DIGITAL PASSPORT    │"
+        "\n├─────────────────────────────────┤"
+        f"\n│ NAME: {member.name[:20]:<23}│"
+        f"\n│ BADGE ID: {badge_id:<21}│"
+        f"\n│ REGISTERED: {registered_at:<17}│"
+        f"\n│ CITIZEN ID: {member.id:<19}│"
+        "\n├─────────────────────────────────┤"
+        "\n│ STATUS: VERIFIED MEMBER         │"
+        "\n└─────────────────────────────────┘"
+        "\n```"
+    )
+
+    await ctx.send(ascii_passport)
 
 # ---------------------------
 # KICK
@@ -192,10 +194,9 @@ async def on_command_error(ctx, error):
     elif isinstance(error, commands.MissingPermissions):
         await ctx.send("🚫 You lack the required Discord permissions.")
     elif isinstance(error, commands.CommandNotFound):
-        return
+        await ctx.send("❓ Unknown command.")
     else:
-        raise error
-
+        await ctx.send(f"⚠️ Error: {str(error)}")
 # ---------------------------
 # COMMAND LIST
 # ---------------------------
@@ -204,4 +205,8 @@ async def cmdlist(ctx):
     command_list = [command.name for command in bot.commands]
     await ctx.send("📜 **Available Commands:**\n" + "\n".join(command_list))
 
-bot.run(TOKEN)
+if TOKEN is None:
+    print("❌ ERROR: TOKEN not found in .env file")
+else:
+    print("✅ TOKEN LOADED")
+    bot.run(TOKEN)
